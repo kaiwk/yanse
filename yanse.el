@@ -36,6 +36,7 @@
 
 (defconst yanse--rgb-regex (rx "rgb(" (group (* (any "," blank num))) ")"))
 (defconst yanse--hex-regex (rx "#" (group (* (any "a-f" "A-F" num)))))
+(defconst yanse--hsl-regex (rx "hsl(" (group (* (any "," blank num "%"))) ")"))
 
 (defun yanse--parse-rgb (rgb-str)
   "Parse RGB from RGB-STR."
@@ -67,7 +68,7 @@
 
 ;;;###autoload
 (defun yanse-rgb-to-hex ()
-  "RGB from BEGIN to END in hex format."
+  "RGB to Hex."
   (interactive)
   (save-match-data
     (when (thing-at-point-looking-at yanse--rgb-regex)
@@ -89,7 +90,7 @@
 
 ;;;###autoload
 (defun yanse-hex-to-rgb ()
-  "Hex from BEGIN to END in RGB format."
+  "Hex to RGB."
   (interactive)
   (save-match-data
     (when (thing-at-point-looking-at yanse--hex-regex)
@@ -112,6 +113,85 @@
             (kill-region begin end)
             (insert rgb)))))))
 
+;;;###autoload
+(defun yanse-hsl-to-rgb ()
+  "HSL to RGB."
+  (interactive)
+  ;; from: https://www.niwa.nu/2013/05/math-behind-colorspace-conversions-rgb-hsl/
+  (when (yanse--hsl-at-point-p)
+    (let* ((range (save-match-data
+                    (when (thing-at-point-looking-at yanse--hsl-regex)
+                      (list (match-beginning 0) (match-end 0)))))
+           (begin (nth 0 range))
+           (end (nth 1 range))
+           (content (save-match-data
+                      (when (thing-at-point-looking-at yanse--hsl-regex)
+                        (buffer-substring-no-properties (match-beginning 1) (match-end 1)))))
+           (hsl (yanse--split-string-trim content ","))
+           (hue (/ (string-to-number (nth 0 hsl)) 360.0))
+           (sat (/ (string-to-number (substring (nth 1 hsl) 0 -1)) 100.0))
+           (lum (/ (string-to-number (substring (nth 2 hsl) 0 -1)) 100.0))
+           (temp-1 (if (< lum 0.5) (* lum (+ 1.0 sat)) (- (+ lum sat) (* lum sat))))
+           (temp-2 (- (* 2 lum) temp-1))
+           (temp-r (let ((res (+ hue 0.333))) (if (> res 1) (- res 1) res)))
+           (temp-g hue)
+           (temp-b (let ((res (- hue 0.333))) (if (< res 0) (+ res 1) res)))
+           (compute-color
+            (lambda (temp-color temp-1 temp-2)
+              (number-to-string
+               (round (* 255
+                         (cond
+                          ((< (* temp-color 6) 1) (+ temp-2 (* (- temp-1 temp-2) 6 temp-color)))
+                          ((< (* temp-color 2) 1) temp-1)
+                          ((< (* temp-color 3) 2) (+ temp-2 (* (- temp-1 temp-2) 6 (- 0.666 temp-color))))
+                          (t temp-2)))))))
+           (r (funcall compute-color temp-r temp-1 temp-2))
+           (g (funcall compute-color temp-g temp-1 temp-2))
+           (b (funcall compute-color temp-b temp-1 temp-2))
+           (rgb (concat "rgb(" (string-join (list r g b) ", ") ")")))
+      (kill-region begin end)
+      (insert rgb))))
+
+;;;###autoload
+(defun yanse-rgb-to-hsl ()
+  "RGB to HSL"
+  (interactive)
+  ;; from: https://www.niwa.nu/2013/05/math-behind-colorspace-conversions-rgb-hsl/
+  (when (yanse--rgb-at-point-p)
+    (let* ((range (save-match-data
+                    (when (thing-at-point-looking-at yanse--rgb-regex)
+                      (list (match-beginning 0) (match-end 0)))))
+           (begin (nth 0 range))
+           (end (nth 1 range))
+           (content (save-match-data
+                      (when (thing-at-point-looking-at yanse--rgb-regex)
+                        (buffer-substring-no-properties (match-beginning 1) (match-end 1)))))
+           (rgb (yanse--split-string-trim content ","))
+           (r (/ (string-to-number (nth 0 rgb)) 255.0))
+           (g (/ (string-to-number (nth 1 rgb)) 255.0))
+           (b (/ (string-to-number (nth 2 rgb)) 255.0))
+           (min (seq-min (list r g b)))
+           (max (seq-max (list r g b)))
+           (lum (round (* (/ (+ min max) 2.0) 100.0)))
+           (sat (round (* (if (<= lum 50.0) (/ (- max min) (+ max min)) (/ (- max min) (- 2.0 max min))) 100.0)))
+           (hue (round (* (cond
+                           ((= max r) (/ (- g b) (- max min)))
+                           ((= max g) (+ 2.0 (/ (- b r) (- max min))))
+                           ((= max b) (+ 4.0 (/ (- r g) (- max min)))))
+                          60.0)))
+           (hsl (concat "hsl(" (string-join
+                                (list
+                                 (number-to-string hue)
+                                 (concat (number-to-string sat) "%")
+                                 (concat (number-to-string lum) "%"))
+                                ", ") ")")))
+      (kill-region begin end)
+      (insert hsl))))
+
+(defun yanse--percentage-to-number (percentage)
+  "Percentage string to number."
+  (/ (string-to-number (substring percentage 0 -1)) 100.0))
+
 (defun yanse--rgb-at-point-p ()
   "Return t if text under point match `yanse--rgb-regex'."
   (save-match-data
@@ -121,6 +201,11 @@
   "Return t if text under point match `yanse--hex-regex'."
   (save-match-data
     (thing-at-point-looking-at yanse--hex-regex)))
+
+(defun yanse--hsl-at-point-p ()
+  "Return t if text under point match `yanse--hsl-regex'"
+  (save-match-data
+    (thing-at-point-looking-at yanse--hsl-regex)))
 
 ;;;###autoload
 (defun yanse-cycle ()
