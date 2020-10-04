@@ -188,6 +188,18 @@
       (kill-region begin end)
       (insert hsl))))
 
+;;;###autoload
+(defun yanse-hex-to-hsl ()
+  (interactive)
+  (yanse-hex-to-rgb)
+  (yanse-rgb-to-hsl))
+
+;;;###autoload
+(defun yanse-hsl-to-hex ()
+  (interactive)
+  (yanse-hsl-to-rgb)
+  (yanse-rgb-to-hex))
+
 (defun yanse--percentage-to-number (percentage)
   "Percentage string to number."
   (/ (string-to-number (substring percentage 0 -1)) 100.0))
@@ -212,8 +224,9 @@
   "Cycle color formats under point."
   (interactive)
   (cond
-   ((yanse--rgb-at-point-p) (yanse-rgb-to-hex))
-   ((yanse--hex-at-point-p) (yanse-hex-to-rgb))))
+   ((yanse--hex-at-point-p) (yanse-hex-to-rgb))
+   ((yanse--rgb-at-point-p) (yanse-rgb-to-hsl))
+   ((yanse--hsl-at-point-p) (yanse-hsl-to-hex))))
 
 (provide 'yanse)
 
